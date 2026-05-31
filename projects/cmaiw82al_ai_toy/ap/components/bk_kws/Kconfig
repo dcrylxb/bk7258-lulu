@@ -1,0 +1,6 @@
+menu "BEKEN kws"
+	config BEKEN_KWS
+		bool "Enable CONFIG_BEKEN_KWS"
+		default y
+		select ASR_SERVICE
+endmenu

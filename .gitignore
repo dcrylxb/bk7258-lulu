@@ -1,0 +1,18 @@
+# Build and runtime artifacts
+build/
+**/build/
+output/
+logs/
+
+# Python/cache noise
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local serial and flash logs
+*.log
+
+# OS/editor noise
+.DS_Store
+.vscode/
+.idea/

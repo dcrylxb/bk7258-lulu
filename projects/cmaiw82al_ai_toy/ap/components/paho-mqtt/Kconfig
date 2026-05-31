@@ -1,0 +1,7 @@
+menu "paho_mqtt_component"
+
+	config PAHO_MQTT
+		bool "Enable PAHO_MQTT"
+		default n
+		
+endmenu

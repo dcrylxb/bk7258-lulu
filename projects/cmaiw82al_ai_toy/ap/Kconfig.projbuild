@@ -1,0 +1,71 @@
+menu "Application Configuration"
+    choice
+        prompt "Select Protocol"
+        default PROTOCOL_USE_WSS
+        help
+          Select the protocol to use: WebSocket (WSS) or MQTT.
+
+        config PROTOCOL_USE_WSS
+            bool "WebSocket"
+            select WEBSOCKET
+
+        config PROTOCOL_USE_MQTT
+            bool "MQTT and UDP"
+            select PAHO_MQTT
+    endchoice
+
+    config WSS_INFO_BY_USER
+        depends on PROTOCOL_USE_WSS
+        bool "Use custom wss server"
+        default n
+
+    config WSS_SERVER_URL
+        depends on WSS_INFO_BY_USER
+        string "WSS server URL"
+        default "ws://106.55.173.79:8989/xiaozhi/v1/"
+
+    config VAD
+        bool "Enable VAD"
+        default n
+
+    config CMAIW82AL_AUDIO_MAIN_MIC
+        int "CMAiW82AL main analog MIC channel"
+        range 1 2
+        default 2
+        help
+          Select the analog MIC channel used as the mono uplink source.
+          This board uses MIC2/R as the verified main microphone.
+
+    config PROTOCOL_IOT_MCP
+        bool "Enable MCP Server"
+        default y
+
+    config IOT_DEV_CAMERA
+        depends on PROTOCOL_IOT_MCP
+        bool "Enable Camera"
+        select APP_CAMERA
+        default y
+
+    config BEKEN_BOX_320X240_USE_FRONT_DVP
+        depends on BEKEN_BOX_320X240_HW
+        bool "Enable DVP camera"
+        default y
+
+    config APP_CLI
+        bool "Enable app cli"
+        default n
+
+    config DUMP_AUDIO_TO_VFS
+        bool "Enable dump audio data to vfs"
+        select ADK_VFS_UTIL
+        default n
+
+    config XIAOZHI_ACT_V2
+        bool "Enable xiaozhi acitve process v2"
+    default n
+
+    config XIAOZHI_OTA_EN
+        depends on XIAOZHI_ACT_V2
+        bool "Enable xiaozhi OTA"
+        default y
+endmenu

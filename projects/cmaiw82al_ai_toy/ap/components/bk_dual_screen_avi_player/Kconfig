@@ -1,0 +1,6 @@
+menu "Dual_screen_avi_player"
+    config DUAL_SCREEN_AVI_PLAYER
+        depends on AVI_PLAYER
+        bool "Enable DUAL_SCREEN_AVI_PLAYER"
+        default n
+endmenu

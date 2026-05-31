@@ -1,0 +1,5 @@
+menu "App_camera"
+    config APP_CAMERA
+        bool "Enable APP_CAMERA"
+        default n
+endmenu

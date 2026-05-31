@@ -1,0 +1,43 @@
+{
+  "purpose": "GC9D01 dual 160x160 dynamic LCD resolution test",
+  "avi": "/home/jason/armino1/cmaiw82al_ai_toy/resources/eyes/generated_gc9d01_320x160_test/neutral_gc9d01_320x160_test.avi",
+  "sf0_neutral_avi": "/home/jason/armino1/cmaiw82al_ai_toy/resources/eyes/generated_gc9d01_320x160_test/sf0/neutral.avi",
+  "sf0_littlefs_bin": "/home/jason/armino1/cmaiw82al_ai_toy/resources/eyes/generated_gc9d01_320x160_test/sf0_gc9d01_320x160_test_15m.bin",
+  "runtime_path": "/sf0/neutral.avi",
+  "geometry": {
+    "avi_width": 320,
+    "avi_height": 160,
+    "panel_width": 160,
+    "panel_height": 160,
+    "left_half": "LCD2 / first LVGL segment",
+    "right_half": "LCD1 / second LVGL segment"
+  },
+  "video": {
+    "codec": "MJPEG",
+    "fps": 10,
+    "frames": 60,
+    "jpeg_quality": 84,
+    "jpeg_subsampling": "4:2:0",
+    "idx1_offsets": "Beken avilib data offsets: chunk_data - (movi_start + 4)"
+  },
+  "littlefs": {
+    "created": true,
+    "size_bytes": 15728640,
+    "block_size": 4096,
+    "page_size": 256
+  },
+  "writer": {
+    "max_jpeg_frame_bytes": 20652,
+    "movi_payload_bytes": 1184802,
+    "idx_entries": 60
+  },
+  "verification": {
+    "sha256": "c9abe2efa7e708ae49132ae44218e4135a46d21eaaab78a8961f4fb57af40370",
+    "file_bytes": 1185994,
+    "width": 320,
+    "height": 160,
+    "frames": 60,
+    "min_jpeg_frame_bytes": 18491,
+    "max_jpeg_frame_bytes": 20652
+  }
+}

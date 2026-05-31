@@ -1,0 +1,9 @@
+menu "App_audio"
+    config APP_AUDIO
+        bool "Enable APP_AUDIO"
+        default y
+
+    config AUDIO_PARA
+        bool "Enable AUDIO_PARA"
+        default n
+endmenu
