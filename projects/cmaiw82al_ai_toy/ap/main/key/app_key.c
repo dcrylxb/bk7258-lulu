@@ -9,6 +9,7 @@
 #include "dialog_module.h"
 #include "app_key.h"
 #include "common.h"
+#include "net_config.h"
 #include "pet_scene.h"
 
 #if CONFIG_LCD
@@ -24,9 +25,16 @@
 
 #define APP_KEY_VERY_LONG_HOLD_MS 1000
 #define APP_KEY_VERY_LONG_HOLD_TICKS (APP_KEY_VERY_LONG_HOLD_MS / KEY_TMR_DURATION)
+#define APP_KEY_BLE_PAIR_CONFIRM_WINDOW_MS 10000
 
 static app_key_config_t key_config[] = APP_KEY_CONFIG_TABLE;
 static uint32_t key_config_size = sizeof(key_config) / sizeof(app_key_config_t);
+static uint32_t s_ble_pair_confirm_until_ms = 0;
+
+static bool _app_key_time_before(uint32_t deadline_ms, uint32_t now_ms)
+{
+    return (int32_t)(deadline_ms - now_ms) > 0;
+}
 
 static app_key_config_t* _find_key_config_by_gpio(uint32_t gpio_id)
 {
@@ -77,6 +85,26 @@ static bool _trigger_pet_touch_event(app_event_t app_event)
     }
 }
 
+static void _trigger_ble_pair_event(void)
+{
+    uint32_t now_ms = rtos_get_time();
+
+    if ((s_ble_pair_confirm_until_ms != 0) &&
+        _app_key_time_before(s_ble_pair_confirm_until_ms, now_ms)) {
+        s_ble_pair_confirm_until_ms = 0;
+        LOGI("BLE pairing confirmed by power key double press\r\n");
+        dialog_module_instance()->speaker_play_prompt_tone(PROMPT_NETWORK_PROVISION);
+        net_config_instance()->start_ble_provisioning();
+        return;
+    }
+
+    s_ble_pair_confirm_until_ms = now_ms + APP_KEY_BLE_PAIR_CONFIRM_WINDOW_MS;
+    LOGI("BLE pairing first double press, waiting confirm until=%u now=%u\r\n",
+         s_ble_pair_confirm_until_ms,
+         now_ms);
+    dialog_module_instance()->speaker_play_prompt_tone(PROMPT_NETWORK_PROVISION);
+}
+
 static void _trigger_key_event(app_event_t app_event)
 {
     if (app_event == APP_EVENT_NONE) {
@@ -109,6 +137,9 @@ static void _trigger_key_event(app_event_t app_event)
         case APP_EVENT_FACTORY_RESET:
             dialog_module_instance()->speaker_play_prompt_tone(PROMPT_FACTORY_RESET);
             system_manager_instance()->send_msg_by_event(SYSTEM_EVENT_FACTORY_RESET);
+            break;
+        case APP_EVENT_BLE_PAIR:
+            _trigger_ble_pair_event();
             break;
         default:
             LOGW("unknown app event: %d\r\n", app_event);

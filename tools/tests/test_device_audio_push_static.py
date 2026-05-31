@@ -118,6 +118,23 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
         ]:
             self.assertIn(marker, probe)
 
+    def test_power_key_double_press_requires_confirmation_before_ble_pairing(self):
+        common_h = read("ap/main/common/common.h")
+        app_key_c = read("ap/main/key/app_key.c")
+
+        for marker in [
+            "APP_EVENT_BLE_PAIR",
+            ".double_event = APP_EVENT_BLE_PAIR",
+            "#define APP_KEY_BLE_PAIR_CONFIRM_WINDOW_MS 10000",
+            "#include \"net_config.h\"",
+            "s_ble_pair_confirm_until_ms",
+            "BLE pairing first double press, waiting confirm",
+            "dialog_module_instance()->speaker_play_prompt_tone(PROMPT_NETWORK_PROVISION);",
+            "BLE pairing confirmed by power key double press",
+            "net_config_instance()->start_ble_provisioning();",
+        ]:
+            self.assertIn(marker, common_h + app_key_c)
+
 
 if __name__ == "__main__":
     unittest.main()

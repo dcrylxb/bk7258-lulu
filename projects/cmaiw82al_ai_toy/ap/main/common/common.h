@@ -18,6 +18,7 @@ typedef enum {
     APP_EVENT_TOUCH_CHIN_DOUBLE,
     APP_EVENT_TOUCH_CHIN_LONG,
     APP_EVENT_TOUCH_CHIN_VERY_LONG,
+    APP_EVENT_BLE_PAIR,
     APP_EVENT_MAX,
 } app_event_t;
 
@@ -135,6 +136,7 @@ typedef enum {
     {                                               \
         .gpio_id = GPIO_54,                         \
         .active_level = LOW_LEVEL_TRIGGER,           \
+        .double_event = APP_EVENT_BLE_PAIR,          \
         .long_event = APP_EVENT_SHUTDOWN,           \
     },                                              \
 }
