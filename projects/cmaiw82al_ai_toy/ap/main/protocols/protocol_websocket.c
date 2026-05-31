@@ -138,6 +138,46 @@ static void copy_json_string_field(cJSON *root, const char *name, char *dst, siz
     }
 }
 
+static void send_manager_response(cJSON *request_id, int status, const char *message, const char *detail)
+{
+    cJSON *response = NULL;
+    cJSON *body = NULL;
+    char *response_str = NULL;
+
+    if (!cJSON_IsString(request_id) || request_id->valuestring == NULL || request_id->valuestring[0] == '\0') {
+        return;
+    }
+
+    response = cJSON_CreateObject();
+    if (response == NULL) {
+        return;
+    }
+
+    cJSON_AddStringToObject(response, "id", request_id->valuestring);
+    cJSON_AddNumberToObject(response, "status", status);
+    if (status >= 200 && status < 300) {
+        body = cJSON_CreateObject();
+        if (body != NULL) {
+            cJSON_AddBoolToObject(body, "ok", true);
+            cJSON_AddStringToObject(body, "message", message ? message : "ok");
+            if (detail != NULL && detail[0] != '\0') {
+                cJSON_AddStringToObject(body, "detail", detail);
+            }
+            cJSON_AddItemToObject(response, "body", body);
+        }
+    } else {
+        cJSON_AddStringToObject(response, "error", message ? message : "device request failed");
+    }
+
+    response_str = cJSON_PrintUnformatted(response);
+    if (response_str != NULL) {
+        protocol_websocket_instance()->sendManagerResponse((uint8_t *)response_str);
+        cJSON_free(response_str);
+    }
+
+    cJSON_Delete(response);
+}
+
 static bool _protocol_websocket_handle_device_request(cJSON *root)
 {
     cJSON *method = NULL;
@@ -213,12 +253,14 @@ static bool _protocol_websocket_handle_device_request(cJSON *root)
     audio_url = cJSON_GetObjectItemCaseSensitive(body, "audio_url");
     if (!cJSON_IsString(audio_url) || audio_url->valuestring == NULL || audio_url->valuestring[0] == '\0') {
         LOGE("play_audio missing audio_url\r\n");
+        send_manager_response(request_id, 400, "play_audio missing audio_url", NULL);
         return true;
     }
 
     request = os_zalloc(sizeof(system_play_audio_request_t));
     if (request == NULL) {
         LOGE("alloc play_audio request fail\r\n");
+        send_manager_response(request_id, 500, "alloc play_audio request fail", NULL);
         return true;
     }
 
@@ -233,6 +275,7 @@ static bool _protocol_websocket_handle_device_request(cJSON *root)
          request->title,
          request->content_id,
          request->audio_url);
+    send_manager_response(request_id, 202, "queued", "play_audio queued");
     return true;
 }
 

@@ -18,6 +18,7 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
 
         for marker in [
             '#define WS_DEVICE_PLAY_AUDIO_PATH "/api/device/play_audio"',
+            "static void send_manager_response",
             'cJSON_GetObjectItemCaseSensitive(root, "method")',
             'cJSON_GetObjectItemCaseSensitive(root, "path")',
             'cJSON_GetObjectItemCaseSensitive(root, "body")',
@@ -26,6 +27,7 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
             "SYSTEM_EVENT_PLAY_AUDIO_URL",
             "system_manager_instance()->send_msg(&msg);",
             "play_audio queued title=%s content_id=%s url=%s",
+            'send_manager_response(request_id, 202, "queued", "play_audio queued");',
         ]:
             self.assertIn(marker, websocket + system_h)
 
