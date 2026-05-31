@@ -48,6 +48,7 @@ def main() -> int:
     scan = sub.add_parser("scan", help="scan for BK provisioning advertisements")
     scan.add_argument("--timeout", type=int, default=15)
     scan.add_argument("--all", action="store_true", help="show all discovered devices")
+    scan.add_argument("--details", action="store_true", help="include bluetoothctl details for each printed device")
 
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("address", help="BLE MAC address")
@@ -65,7 +66,7 @@ def main() -> int:
         devices = scan_devices(args.timeout)
         for device in devices:
             if args.all or is_candidate(device):
-                print(f"{device.address} {device.name}")
+                print(format_scan_device(device, args.details))
         return 0
 
     session = GattSession(args.address, args.addr_type, args.timeout)
@@ -126,6 +127,14 @@ def is_candidate(device: Device) -> bool:
 
 def looks_like_device_detail(text: str) -> bool:
     return bool(re.match(r"^[A-Za-z ]+:", text))
+
+
+def format_scan_device(device: Device, details: bool = False) -> str:
+    line = f"{device.address} {device.name}"
+    if details and device.details:
+        collapsed = re.sub(r"\s+", " ", strip_ansi(device.details)).strip()
+        line = f"{line} | {collapsed}"
+    return line
 
 
 def enrich_devices_with_info(devices: list[Device]) -> list[Device]:

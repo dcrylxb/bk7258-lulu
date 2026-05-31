@@ -69,6 +69,21 @@ class BkBleProvisioningProbeTests(unittest.TestCase):
         self.assertIn("FE01", devices[0].details.upper())
         self.assertTrue(probe.is_candidate(devices[0]))
 
+    def test_scan_details_format_includes_bluetoothctl_info(self):
+        probe = load_probe()
+        device = probe.Device(
+            address="AA:BB:CC:DD:EE:FF",
+            name="Unknown",
+            details="UUID: Vendor specific (0000fe01-0000-1000-8000-00805f9b34fb)\nRSSI: -48",
+        )
+
+        line = probe.format_scan_device(device, details=True)
+
+        self.assertIn("AA:BB:CC:DD:EE:FF Unknown", line)
+        self.assertIn("0000fe01-0000-1000-8000-00805f9b34fb", line)
+        self.assertIn("RSSI: -48", line)
+        self.assertNotIn("\n", line)
+
 
 if __name__ == "__main__":
     unittest.main()
