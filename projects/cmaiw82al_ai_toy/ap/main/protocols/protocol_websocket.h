@@ -22,6 +22,7 @@ typedef struct{
     super_module_t super;
     void (*sendAudio)(uint8_t*, int);
     void (*sendText)(uint8_t*);
+    void (*sendManagerResponse)(uint8_t*);
     char* (*getSessionId)(void);
 }pws_module_t;
 

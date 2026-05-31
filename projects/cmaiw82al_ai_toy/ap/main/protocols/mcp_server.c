@@ -4,6 +4,7 @@
 #include <string.h>
 #include "boards_common.h"
 #include "protocol.h"
+#include "protocol_websocket.h"
 #include "iot_devices.h"
 
 #define TAG "mcp_s"
@@ -17,6 +18,15 @@ static beken_thread_t _call_func_thr = NULL;
 static beken_queue_t mcp_queue = NULL;
 static char cap_url[192];
 static char cap_token[128];
+
+#define MCP_MANAGER_REQUEST_SLOTS 8
+
+typedef struct {
+    int mcp_id;
+    char manager_request_id[64];
+} mcp_manager_request_t;
+
+static mcp_manager_request_t manager_requests[MCP_MANAGER_REQUEST_SLOTS];
 
 #define MCP_VISION_UPLOAD_PATH "/xiaozhi/api/vision"
 
@@ -87,11 +97,108 @@ static void mcp_server_reply_tool_list(int id, char* result)
     os_free(payload);
 }
 
+static void mcp_server_set_manager_request_id(int id, const char *request_id)
+{
+    int free_slot = -1;
+
+    if (request_id == NULL || request_id[0] == '\0') {
+        return;
+    }
+
+    for (int i = 0; i < MCP_MANAGER_REQUEST_SLOTS; i++) {
+        if (manager_requests[i].mcp_id == id) {
+            os_snprintf(manager_requests[i].manager_request_id,
+                        sizeof(manager_requests[i].manager_request_id),
+                        "%s",
+                        request_id);
+            return;
+        }
+        if (free_slot < 0 && manager_requests[i].mcp_id == 0) {
+            free_slot = i;
+        }
+    }
+
+    if (free_slot < 0) {
+        free_slot = 0;
+    }
+
+    manager_requests[free_slot].mcp_id = id;
+    os_snprintf(manager_requests[free_slot].manager_request_id,
+                sizeof(manager_requests[free_slot].manager_request_id),
+                "%s",
+                request_id);
+}
+
+static bool mcp_server_take_manager_request_id(int id, char *request_id, size_t request_id_size)
+{
+    if (request_id == NULL || request_id_size == 0) {
+        return false;
+    }
+
+    for (int i = 0; i < MCP_MANAGER_REQUEST_SLOTS; i++) {
+        if (manager_requests[i].mcp_id == id && manager_requests[i].manager_request_id[0] != '\0') {
+            os_snprintf(request_id, request_id_size, "%s", manager_requests[i].manager_request_id);
+            manager_requests[i].mcp_id = 0;
+            manager_requests[i].manager_request_id[0] = '\0';
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool mcp_server_reply_manager_response(int id, int status, char *result, char *error_message)
+{
+    char request_id[64] = {0};
+    cJSON *response = NULL;
+    cJSON *body = NULL;
+    char *response_str = NULL;
+    bool sent = false;
+
+    if (!mcp_server_take_manager_request_id(id, request_id, sizeof(request_id))) {
+        return false;
+    }
+
+    response = cJSON_CreateObject();
+    if (response == NULL) {
+        return false;
+    }
+
+    cJSON_AddStringToObject(response, "id", request_id);
+    cJSON_AddNumberToObject(response, "status", status);
+
+    if (status >= 200 && status < 300) {
+        if (result != NULL) {
+            body = cJSON_Parse(result);
+        }
+        if (body == NULL) {
+            body = cJSON_CreateObject();
+        }
+        if (body != NULL) {
+            cJSON_AddItemToObject(response, "body", body);
+        }
+    } else {
+        cJSON_AddStringToObject(response, "error", error_message);
+    }
+
+    response_str = cJSON_PrintUnformatted(response);
+    if (response_str != NULL) {
+        protocol_websocket_instance()->sendManagerResponse((uint8_t *)response_str);
+        cJSON_free(response_str);
+        sent = true;
+    }
+
+    cJSON_Delete(response);
+    return sent;
+}
+
 static void mcp_server_reply_result(int id, char* result)
 {
     char* payload = (char*)psram_malloc(1024 * sizeof(char));
     os_snprintf(payload, 1024 * sizeof(char), "{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":%s}", id, result);
-    protocol_instance()->sendMcpMessage((uint8_t*)payload);
+    if (!mcp_server_reply_manager_response(id, 200, result, NULL)) {
+        protocol_instance()->sendMcpMessage((uint8_t*)payload);
+    }
     LOGD("json: %s\r\n", payload);
     os_free(payload);
 }
@@ -99,8 +206,10 @@ static void mcp_server_reply_result(int id, char* result)
 static void mcp_server_reply_error(int id, char* message) 
 {
     char* payload = psram_malloc(1024 * sizeof(char));
-    os_snprintf(payload, 1024 * sizeof(char), "{\"jsonrpc\":\"2.0\",\"id\":%d,\"error\":{\"message\":\"%s\"}", id, message);
-    protocol_instance()->sendMcpMessage((uint8_t*)payload);
+    os_snprintf(payload, 1024 * sizeof(char), "{\"jsonrpc\":\"2.0\",\"id\":%d,\"error\":{\"message\":\"%s\"}}", id, message);
+    if (!mcp_server_reply_manager_response(id, 500, NULL, message)) {
+        protocol_instance()->sendMcpMessage((uint8_t*)payload);
+    }
     LOGD("json: %s\r\n", payload);
     os_free(payload);
 }
@@ -519,6 +628,7 @@ static mcp_server_t g_mcp_server =
     .reply_error = mcp_server_reply_error,
     .reply_result = mcp_server_reply_result,
     .reply_tool_list = mcp_server_reply_tool_list,
+    .set_manager_request_id = mcp_server_set_manager_request_id,
     .get_explain_url = mcp_server_get_url,
     .get_explain_token = mcp_server_get_token,
 };

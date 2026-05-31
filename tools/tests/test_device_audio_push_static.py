@@ -55,6 +55,44 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
         ]:
             self.assertIn(marker, play_helper)
 
+    def test_websocket_manager_mcp_call_is_bridged_to_device_mcp_server(self):
+        websocket = read("ap/main/protocols/protocol_websocket.c")
+        websocket_h = read("ap/main/protocols/protocol_websocket.h")
+        mcp_h = read("ap/main/protocols/mcp_server.h")
+        mcp_c = read("ap/main/protocols/mcp_server.c")
+
+        for marker in [
+            '#define WS_MCP_CALL_PATH "/api/mcp/call"',
+            "mcp_server_instance()->set_manager_request_id",
+            "mcp_server_instance()->recv_msg_cb(mcp_request);",
+            'cJSON_AddStringToObject(mcp_request, "jsonrpc", "2.0");',
+            'cJSON_AddStringToObject(mcp_request, "method", "tools/call");',
+            'cJSON_AddStringToObject(params, "name", tool_name->valuestring);',
+            'cJSON_AddItemReferenceToObject(params, "arguments", arguments);',
+        ]:
+            self.assertIn(marker, websocket)
+
+        for marker in [
+            "void (*sendManagerResponse)(uint8_t*);",
+            ".sendManagerResponse = _protocol_websocket_send_text",
+        ]:
+            self.assertIn(marker, websocket_h + websocket)
+
+        for marker in [
+            "char manager_request_id[64];",
+            "void (*set_manager_request_id)(int, const char *);",
+            "static void mcp_server_set_manager_request_id",
+            "static bool mcp_server_take_manager_request_id",
+            "if (!mcp_server_reply_manager_response(id, 200, result, NULL))",
+            "if (!mcp_server_reply_manager_response(id, 500, NULL, message))",
+            'cJSON_AddStringToObject(response, "id", request_id);',
+            'cJSON_AddNumberToObject(response, "status", status);',
+            'cJSON_AddStringToObject(response, "error", error_message);',
+            "protocol_websocket_instance()->sendManagerResponse((uint8_t *)response_str);",
+            '"{\\"jsonrpc\\":\\"2.0\\",\\"id\\":%d,\\"error\\":{\\"message\\":\\"%s\\"}}"',
+        ]:
+            self.assertIn(marker, mcp_h + mcp_c)
+
     def test_ble_linux_probe_usage_is_documented(self):
         service_doc = (ROOT / "docs" / "06_service_backend.md").read_text(encoding="utf-8", errors="ignore")
         probe = (ROOT / "tools" / "bk_ble_provisioning_probe.py").read_text(encoding="utf-8", errors="ignore")

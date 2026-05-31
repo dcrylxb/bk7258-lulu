@@ -23,12 +23,14 @@
 #define WSS_TX_TIME             1000
 #define WS_SESSION_ID_LEN       160
 #define WS_DEVICE_PLAY_AUDIO_PATH "/api/device/play_audio"
+#define WS_MCP_CALL_PATH "/api/mcp/call"
 
 static websocket_client_input_t wss_conn_cfg = {0};
 static beken_semaphore_t conn_sem = NULL;
 static char g_header[WEB_HEAD_LEN] = {0};
 static char ws_session_id[WS_SESSION_ID_LEN] = {0};
 static uint8_t* ws_recv_buf = NULL;
+static int ws_manager_mcp_id = 1000;
 
 static void _web_get_header(void)
 {
@@ -139,6 +141,7 @@ static void copy_json_string_field(cJSON *root, const char *name, char *dst, siz
 static bool _protocol_websocket_handle_device_request(cJSON *root)
 {
     cJSON *method = NULL;
+    cJSON *request_id = NULL;
     cJSON *path = NULL;
     cJSON *body = NULL;
     cJSON *audio_url = NULL;
@@ -149,6 +152,7 @@ static bool _protocol_websocket_handle_device_request(cJSON *root)
         return false;
     }
 
+    request_id = cJSON_GetObjectItemCaseSensitive(root, "id");
     method = cJSON_GetObjectItemCaseSensitive(root, "method");
     path = cJSON_GetObjectItemCaseSensitive(root, "path");
     body = cJSON_GetObjectItemCaseSensitive(root, "body");
@@ -156,8 +160,52 @@ static bool _protocol_websocket_handle_device_request(cJSON *root)
         return false;
     }
 
-    if (os_strcmp(method->valuestring, "POST") != 0 ||
-        os_strcmp(path->valuestring, WS_DEVICE_PLAY_AUDIO_PATH) != 0) {
+    if (os_strcmp(method->valuestring, "POST") != 0) {
+        LOGW("unsupported device request method=%s path=%s\r\n", method->valuestring, path->valuestring);
+        return true;
+    }
+
+    if (os_strcmp(path->valuestring, WS_MCP_CALL_PATH) == 0) {
+        cJSON *tool_name = cJSON_GetObjectItemCaseSensitive(body, "tool_name");
+        cJSON *arguments = cJSON_GetObjectItemCaseSensitive(body, "arguments");
+        cJSON *mcp_request = NULL;
+        cJSON *params = NULL;
+        int mcp_id = ws_manager_mcp_id++;
+
+        if (!cJSON_IsString(request_id) || request_id->valuestring == NULL ||
+            !cJSON_IsString(tool_name) || tool_name->valuestring == NULL ||
+            !cJSON_IsObject(arguments)) {
+            LOGE("mcp call missing id/tool_name/arguments\r\n");
+            return true;
+        }
+
+        mcp_request = cJSON_CreateObject();
+        params = cJSON_CreateObject();
+        if (mcp_request == NULL || params == NULL) {
+            LOGE("create mcp request fail\r\n");
+            if (mcp_request != NULL) {
+                cJSON_Delete(mcp_request);
+            }
+            if (params != NULL) {
+                cJSON_Delete(params);
+            }
+            return true;
+        }
+
+        cJSON_AddStringToObject(mcp_request, "jsonrpc", "2.0");
+        cJSON_AddNumberToObject(mcp_request, "id", mcp_id);
+        cJSON_AddStringToObject(mcp_request, "method", "tools/call");
+        cJSON_AddStringToObject(params, "name", tool_name->valuestring);
+        cJSON_AddItemReferenceToObject(params, "arguments", arguments);
+        cJSON_AddItemToObject(mcp_request, "params", params);
+
+        mcp_server_instance()->set_manager_request_id(mcp_id, request_id->valuestring);
+        mcp_server_instance()->recv_msg_cb(mcp_request);
+        cJSON_Delete(mcp_request);
+        return true;
+    }
+
+    if (os_strcmp(path->valuestring, WS_DEVICE_PLAY_AUDIO_PATH) != 0) {
         LOGW("unsupported device request method=%s path=%s\r\n", method->valuestring, path->valuestring);
         return true;
     }
@@ -466,6 +514,7 @@ static pws_module_t g_pws_manger =
     .super.deinit = _pw_deinit,
     .sendAudio = _protocl_websocket_send_audio,
     .sendText = _protocol_websocket_send_text,
+    .sendManagerResponse = _protocol_websocket_send_text,
     .getSessionId = _websocket_get_session_id,
 };
 

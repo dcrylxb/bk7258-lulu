@@ -15,6 +15,7 @@ typedef struct{
     void (*reply_error)(int, char*);
     void (*reply_tool_list)(int, char*);
     void (*recv_msg_cb)(cJSON*);
+    void (*set_manager_request_id)(int, const char *);
     char* (*get_explain_url)(void);
     char* (*get_explain_token)(void);
 }mcp_server_t;
