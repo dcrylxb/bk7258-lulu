@@ -31,6 +31,7 @@
 #define LOGW(format, ...) BK_LOGW(TAG, "[%s][%d] " format, __func__, __LINE__, ##__VA_ARGS__)
 
 #define VOICE_MIC_CB_STALE_MS 6000
+#define REMOTE_AUDIO_DEFAULT_TITLE "remote_audio"
 
 static bool _voice_status_can_start_listen(system_status_e status)
 {
@@ -67,6 +68,50 @@ static bk_err_t _recover_voice_stream_before_listen(const char *reason)
     }
 
     return bk_app_audio_recover_voice_streaming(force_restart);
+}
+
+static void _play_remote_audio_url(system_play_audio_request_t *request)
+{
+#if (CONFIG_AUDIO_PLAYER)
+    bk_err_t ret = BK_OK;
+    const char *title = NULL;
+
+    if (request == NULL || request->audio_url[0] == '\0') {
+        LOGE("remote audio request invalid\r\n");
+        return;
+    }
+
+    if (request->title[0] == '\0') {
+        os_snprintf(request->title, sizeof(request->title), "%s", REMOTE_AUDIO_DEFAULT_TITLE);
+    }
+    title = request->title;
+    LOGI("remote audio start title=%s content_id=%s url=%s\r\n",
+         title,
+         request->content_id,
+         request->audio_url);
+
+    app_audio_player_stop();
+
+    ret = app_audio_player_clear_music_list();
+    if (ret != BK_OK) {
+        LOGE("remote audio clear list fail ret=%d\r\n", ret);
+        return;
+    }
+
+    ret = app_audio_player_add_music(request->title, request->audio_url);
+    if (ret != BK_OK) {
+        LOGE("remote audio add fail ret=%d\r\n", ret);
+        return;
+    }
+
+    ret = app_audio_player_start();
+    if (ret != BK_OK) {
+        LOGE("remote audio start fail ret=%d\r\n", ret);
+        return;
+    }
+#else
+    LOGW("remote audio ignored, CONFIG_AUDIO_PLAYER disabled\r\n");
+#endif
 }
 
 static void _manager_task(void *arg)
@@ -408,6 +453,11 @@ static void _manager_task(void *arg)
                     pet_brain_emit_emotion((char *)msg.param);
                 }
                 break;
+
+            case SYSTEM_EVENT_PLAY_AUDIO_URL:
+                _play_remote_audio_url((system_play_audio_request_t *)msg.param);
+                break;
+
             default:
                 LOGI("other event:%d\r\n", msg.event);
                 break;

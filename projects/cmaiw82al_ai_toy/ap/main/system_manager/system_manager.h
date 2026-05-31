@@ -8,6 +8,9 @@
 #define SYSTEM_MANAGER_TASK_NAME                  "sys_manager"
 #define SYSTEM_MANAGER_TASK_PRIORITY              4
 #define SYSTEM_MANAGER_TASK_SIZE                  (4096)
+#define SYSTEM_PLAY_AUDIO_URL_MAX_LEN             256
+#define SYSTEM_PLAY_AUDIO_TITLE_MAX_LEN           64
+#define SYSTEM_PLAY_AUDIO_CONTENT_ID_MAX_LEN      64
 
 typedef enum{
     SYSTEM_STATUS_NULL = 0,
@@ -80,6 +83,7 @@ typedef enum{
     SYSTEM_EVENT_IDLE,                            //进入空闲状态
     SYSTEM_EVENT_UI_DISP_TEXT,                    //刷新ui文本
     SYSTEM_EVENT_UI_DISP_EMOJI,                   //刷新表情
+    SYSTEM_EVENT_PLAY_AUDIO_URL,                  //播放远程音频 URL
 
     SYSTEM_EVENT_OTA_START,                       //开始更新固件
     SYSTEM_EVENT_OTA_FAIL,                        //更新固件失败
@@ -93,6 +97,12 @@ typedef struct{
     system_event_e event;
     void* param;
 }sysMsg_t;
+
+typedef struct {
+    char audio_url[SYSTEM_PLAY_AUDIO_URL_MAX_LEN];
+    char title[SYSTEM_PLAY_AUDIO_TITLE_MAX_LEN];
+    char content_id[SYSTEM_PLAY_AUDIO_CONTENT_ID_MAX_LEN];
+} system_play_audio_request_t;
 
 typedef struct{
     super_module_t               super;

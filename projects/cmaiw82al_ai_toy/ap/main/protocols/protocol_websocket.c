@@ -22,6 +22,7 @@
 #define WSS_CONN_TIME           10000
 #define WSS_TX_TIME             1000
 #define WS_SESSION_ID_LEN       160
+#define WS_DEVICE_PLAY_AUDIO_PATH "/api/device/play_audio"
 
 static websocket_client_input_t wss_conn_cfg = {0};
 static beken_semaphore_t conn_sem = NULL;
@@ -121,6 +122,72 @@ static void send_disp_emoji(char* emoji)
     system_manager_instance()->send_msg(&msg);
 }
 
+static void copy_json_string_field(cJSON *root, const char *name, char *dst, size_t dst_size)
+{
+    cJSON *item = NULL;
+
+    if (root == NULL || name == NULL || dst == NULL || dst_size == 0) {
+        return;
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(root, name);
+    if (cJSON_IsString(item) && item->valuestring != NULL) {
+        snprintf(dst, dst_size, "%s", item->valuestring);
+    }
+}
+
+static bool _protocol_websocket_handle_device_request(cJSON *root)
+{
+    cJSON *method = NULL;
+    cJSON *path = NULL;
+    cJSON *body = NULL;
+    cJSON *audio_url = NULL;
+    system_play_audio_request_t *request = NULL;
+    sysMsg_t msg = {0};
+
+    if (root == NULL) {
+        return false;
+    }
+
+    method = cJSON_GetObjectItemCaseSensitive(root, "method");
+    path = cJSON_GetObjectItemCaseSensitive(root, "path");
+    body = cJSON_GetObjectItemCaseSensitive(root, "body");
+    if (!cJSON_IsString(method) || !cJSON_IsString(path) || !cJSON_IsObject(body)) {
+        return false;
+    }
+
+    if (os_strcmp(method->valuestring, "POST") != 0 ||
+        os_strcmp(path->valuestring, WS_DEVICE_PLAY_AUDIO_PATH) != 0) {
+        LOGW("unsupported device request method=%s path=%s\r\n", method->valuestring, path->valuestring);
+        return true;
+    }
+
+    audio_url = cJSON_GetObjectItemCaseSensitive(body, "audio_url");
+    if (!cJSON_IsString(audio_url) || audio_url->valuestring == NULL || audio_url->valuestring[0] == '\0') {
+        LOGE("play_audio missing audio_url\r\n");
+        return true;
+    }
+
+    request = os_zalloc(sizeof(system_play_audio_request_t));
+    if (request == NULL) {
+        LOGE("alloc play_audio request fail\r\n");
+        return true;
+    }
+
+    snprintf(request->audio_url, sizeof(request->audio_url), "%s", audio_url->valuestring);
+    copy_json_string_field(body, "title", request->title, sizeof(request->title));
+    copy_json_string_field(body, "content_id", request->content_id, sizeof(request->content_id));
+
+    msg.event = SYSTEM_EVENT_PLAY_AUDIO_URL;
+    msg.param = request;
+    system_manager_instance()->send_msg(&msg);
+    LOGI("play_audio queued title=%s content_id=%s url=%s\r\n",
+         request->title,
+         request->content_id,
+         request->audio_url);
+    return true;
+}
+
 static void recv_cjson_handle(cJSON* root)
 {
     cJSON* type = NULL;
@@ -134,7 +201,17 @@ static void recv_cjson_handle(cJSON* root)
         return;
     }
 
+    if (_protocol_websocket_handle_device_request(root)) {
+        cJSON_Delete(root);
+        return;
+    }
+
     type = cJSON_GetObjectItem(root, "type");
+    if (!cJSON_IsString(type) || type->valuestring == NULL) {
+        LOGW("ignore websocket json without string type\r\n");
+        cJSON_Delete(root);
+        return;
+    }
     if (strcmp(type->valuestring, "hello") == 0) {
         _parse_server_hello(root);
     }

@@ -142,6 +142,32 @@ notify conn:0 opcode:24 status:0 len:7
 若小程序在第一包报“设备响应失败，opcode24,status 1”，根因是小程序把续包状态
 误判为失败；设备侧当时已经完成扫描并返回了 AP 列表。
 
+2026-06-01 补充电脑蓝牙调试经验：本机蓝牙可作为 Linux BLE GATT 探针，能替代
+手机完成“是否广播、是否能连接、FA00/EA01/EA02 是否存在、opcode 是否返回”的
+协议层定位，但不能完全替代微信小程序蓝牙栈和最终用户绑定页面验证。当前已确认
+笔记本蓝牙适配器可用，`bluetoothctl show` 显示 hci0 powered，`hciconfig -a`
+可看到 Intel 蓝牙控制器，扫描能发现周边 BLE 设备。
+
+设备必须先进入 BLE 配网广播态，否则电脑和手机都会搜不到候选设备。当前探针命令：
+
+```sh
+cd /home/jason/armino1/.git-push-work/bk7258-lulu
+python3 tools/bk_ble_provisioning_probe.py scan --timeout 20 --all
+python3 tools/bk_ble_provisioning_probe.py wifi-scan <BLE_MAC> --addr-type public
+python3 tools/bk_ble_provisioning_probe.py auth-sign <BLE_MAC> "signing_message"
+```
+
+探针和小程序使用同一帧格式：
+
+- App 写入 EA02：`[opcode_le16][payload_len_le16][payload]`
+- 设备通知 EA01：`[opcode_le16][status_u8][payload_len_le16][payload]`
+- Wi-Fi 扫描：`opcode=24`
+- 设备签名：`opcode=151`
+
+如果 `scan` 只能看到普通蓝牙设备、看不到 `BK_` 或 FE01 相关广播，先不要改小程序
+写入逻辑，应先通过串口或按键确认设备已经进入配网模式，并看设备侧是否打印官方
+BLE provisioning 广播名。
+
 ## 三端设备鉴权绑定联调进展
 
 2026-05-31 对照 `nicolulu-server-golang-dev-v0.6.3`、`ai-companion-miniprogram-main`
