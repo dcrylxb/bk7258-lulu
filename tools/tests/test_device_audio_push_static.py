@@ -137,6 +137,28 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
         ]:
             self.assertIn(marker, common_h + app_key_c)
 
+    def test_audio_player_stop_is_exposed_as_device_mcp_tool(self):
+        devices_h = read("ap/main/iot/iot_devices.h")
+        devices_c = read("ap/main/iot/iot_devices.c")
+        player_c = read("ap/main/iot/iot_audio_player.c")
+        cmake = read("ap/CMakeLists.txt")
+
+        for marker in [
+            "int iot_audio_player_tool_init(void);",
+            "iot_audio_player_tool_init();",
+            "./main/iot/iot_audio_player.c",
+            "#if (CONFIG_AUDIO_PLAYER)",
+            "bk_err_t app_audio_player_stop(void);",
+            "static void audio_player_stop_func_cb(mcp_cf_t *msg)",
+            "app_audio_player_stop();",
+            "audio player is disabled",
+            'stop_tool->name = "self.audio_player.stop";',
+            "stop_tool->func_cb = audio_player_stop_func_cb;",
+            "mcp_server_instance()->reply_result(msg->id, json_string);",
+        ]:
+            self.assertIn(marker, devices_h + devices_c + player_c + cmake)
+        self.assertNotIn('#include "app_audio_player.h"', player_c)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,7 @@ typedef struct{
 #endif
 
 int iot_volume_tool_init(void);
+int iot_audio_player_tool_init(void);
 int iot_pet_tool_init(void);
 iot_devices_t* iot_devices_instance(void);
 

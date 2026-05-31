@@ -123,6 +123,7 @@ if (CONFIG_PROTOCOL_IOT_MCP)
         ./main/iot/iot_devices.c
         ./main/iot/iot_volume.c
         ./main/iot/iot_pet.c
+        ./main/iot/iot_audio_player.c
         ./main/protocols/mcp_property.c
         ./main/protocols/mcp_server.c
     )
