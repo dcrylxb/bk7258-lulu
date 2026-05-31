@@ -165,6 +165,25 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
             self.assertIn(marker, devices_h + devices_c + player_c + cmake)
         self.assertNotIn('#include "app_audio_player.h"', player_c)
 
+    def test_websocket_play_audio_can_play_local_prompt_without_audio_player(self):
+        websocket = read("ap/main/protocols/protocol_websocket.c")
+
+        for marker in [
+            '#include "pet_prompt.h"',
+            'cJSON_GetObjectItemCaseSensitive(body, "prompt_id")',
+            "pet_prompt_id_is_allowed(prompt_id->valuestring)",
+            "pet_prompt_play(prompt_id->valuestring",
+            'send_manager_response(request_id, 200, "prompt played", pet_prompt_result_name(prompt_result));',
+            'send_manager_response(request_id, 400, "invalid prompt_id", NULL);',
+        ]:
+            self.assertIn(marker, websocket)
+
+        prompt_parse = websocket.index('cJSON_GetObjectItemCaseSensitive(body, "prompt_id")')
+        audio_url_required = websocket.index('cJSON_GetObjectItemCaseSensitive(body, "audio_url")')
+        disabled_guard = websocket.index("#if !CONFIG_AUDIO_PLAYER")
+        self.assertLess(prompt_parse, audio_url_required)
+        self.assertLess(prompt_parse, disabled_guard)
+
 
 if __name__ == "__main__":
     unittest.main()

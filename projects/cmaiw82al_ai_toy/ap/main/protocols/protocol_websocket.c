@@ -11,6 +11,7 @@
 #include "boards_common.h"
 #include "dialog_module.h"
 #include "mcp_server.h"
+#include "pet_prompt.h"
 
 #define TAG "ws"
 
@@ -185,6 +186,7 @@ static bool _protocol_websocket_handle_device_request(cJSON *root)
     cJSON *path = NULL;
     cJSON *body = NULL;
     cJSON *audio_url = NULL;
+    cJSON *prompt_id = NULL;
     system_play_audio_request_t *request = NULL;
     sysMsg_t msg = {0};
 
@@ -247,6 +249,34 @@ static bool _protocol_websocket_handle_device_request(cJSON *root)
 
     if (os_strcmp(path->valuestring, WS_DEVICE_PLAY_AUDIO_PATH) != 0) {
         LOGW("unsupported device request method=%s path=%s\r\n", method->valuestring, path->valuestring);
+        return true;
+    }
+
+    prompt_id = cJSON_GetObjectItemCaseSensitive(body, "prompt_id");
+    if (cJSON_IsString(prompt_id) && prompt_id->valuestring != NULL && prompt_id->valuestring[0] != '\0') {
+        pet_prompt_gate_t gate = {
+            .tts_active = (SYSTEM_STATUS_PLAYING == system_manager_instance()->m_system_status),
+            .can_interrupt_tts = false,
+        };
+        pet_prompt_skip_reason_t skip_reason = PET_PROMPT_SKIP_NONE;
+        pet_prompt_result_t prompt_result = PET_PROMPT_RESULT_ERROR;
+
+        if (!pet_prompt_id_is_allowed(prompt_id->valuestring)) {
+            LOGW("play_audio invalid prompt_id=%s\r\n", prompt_id->valuestring);
+            send_manager_response(request_id, 400, "invalid prompt_id", NULL);
+            return true;
+        }
+
+        prompt_result = pet_prompt_play(prompt_id->valuestring, &gate, &skip_reason);
+        if (prompt_result == PET_PROMPT_RESULT_PLAYED) {
+            send_manager_response(request_id, 200, "prompt played", pet_prompt_result_name(prompt_result));
+        } else {
+            LOGW("play_audio prompt skipped id=%s result=%s reason=%s\r\n",
+                 prompt_id->valuestring,
+                 pet_prompt_result_name(prompt_result),
+                 pet_prompt_skip_reason_name(skip_reason));
+            send_manager_response(request_id, 409, "prompt skipped", pet_prompt_skip_reason_name(skip_reason));
+        }
         return true;
     }
 
