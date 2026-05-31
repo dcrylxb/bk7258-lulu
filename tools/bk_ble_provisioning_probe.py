@@ -31,6 +31,7 @@ OP_AUTH_SIGN = 151
 class Device:
     address: str
     name: str
+    details: str = ""
 
 
 @dataclass
@@ -96,19 +97,35 @@ def main() -> int:
 def scan_devices(timeout: int) -> list[Device]:
     cmd = ["bluetoothctl", "--timeout", str(timeout), "scan", "on"]
     result = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+    return parse_scan_output(result.stdout)
+
+
+def parse_scan_output(output: str) -> list[Device]:
     devices: dict[str, Device] = {}
-    for line in strip_ansi(result.stdout).splitlines():
+    for line in strip_ansi(output).splitlines():
         match = re.search(r"(?:NEW|CHG).*Device\s+([0-9A-F:]{17})\s+(.+)$", line, re.I)
         if not match:
             continue
         address = match.group(1).upper()
-        name = match.group(2).strip()
-        devices[address] = Device(address=address, name=name)
+        text = match.group(2).strip()
+        existing = devices.get(address)
+        name = existing.name if existing else text
+        if not existing and not looks_like_device_detail(text):
+            name = text
+        elif not existing:
+            name = address
+        details = " ".join(part for part in [existing.details if existing else "", text] if part)
+        devices[address] = Device(address=address, name=name, details=details)
     return sorted(devices.values(), key=lambda item: item.address)
 
 
 def is_candidate(device: Device) -> bool:
-    return device.name.upper().startswith("BK_") or "FE01" in device.name.upper()
+    text = f"{device.name} {device.details}".upper()
+    return device.name.upper().startswith("BK_") or "FE01" in text or "FA00" in text
+
+
+def looks_like_device_detail(text: str) -> bool:
+    return bool(re.match(r"^[A-Za-z ]+:", text))
 
 
 class GattSession:
