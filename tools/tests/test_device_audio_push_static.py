@@ -26,10 +26,16 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
             "system_play_audio_request_t",
             "SYSTEM_EVENT_PLAY_AUDIO_URL",
             "system_manager_instance()->send_msg(&msg);",
+            "#if !CONFIG_AUDIO_PLAYER",
+            'send_manager_response(request_id, 501, "audio player is disabled", "CONFIG_AUDIO_PLAYER disabled");',
             "play_audio queued title=%s content_id=%s url=%s",
             'send_manager_response(request_id, 202, "queued", "play_audio queued");',
         ]:
             self.assertIn(marker, websocket + system_h)
+
+        disabled_guard = websocket.index("#if !CONFIG_AUDIO_PLAYER")
+        request_alloc = websocket.index("request = os_zalloc(sizeof(system_play_audio_request_t));")
+        self.assertLess(disabled_guard, request_alloc)
 
         self.assertNotIn("app_audio_player_start(", websocket)
         self.assertNotIn("app_audio_player_add_music(", websocket)

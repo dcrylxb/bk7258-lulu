@@ -257,6 +257,12 @@ static bool _protocol_websocket_handle_device_request(cJSON *root)
         return true;
     }
 
+#if !CONFIG_AUDIO_PLAYER
+    LOGW("play_audio rejected, CONFIG_AUDIO_PLAYER disabled url=%s\r\n", audio_url->valuestring);
+    send_manager_response(request_id, 501, "audio player is disabled", "CONFIG_AUDIO_PLAYER disabled");
+    return true;
+#endif
+
     request = os_zalloc(sizeof(system_play_audio_request_t));
     if (request == NULL) {
         LOGE("alloc play_audio request fail\r\n");
