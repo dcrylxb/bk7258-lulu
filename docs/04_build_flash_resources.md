@@ -84,6 +84,57 @@ resources/prompts/   提示音、角色提示词、离线语音资源说明
 后续可以把资源生成脚本放到 `tools/`，但不要假设 SDK stock BKFIL 会自动写入
 外部 `/sf0`。
 
+## BK Loader Linux 命令行
+
+2026-05-31 对照博通官方 BKFIL v4.1.2 Linux 文档和本地 `bk_loader --help`
+确认：Linux 包里 `bk_loader` 是命令行可执行文件，GUI 包里 `BKFIL` 是界面工具。
+根目录 `/home/jason/armino1/bk_loader` 已加执行权限，版本输出为
+`bk_loader, version 4.1.2.141`。完整工具包仍保留在
+`/home/jason/armino1/.codex-tools/beken/bk_loader_linux_4.1.2.260525141/bk_loader/bk_loader`。
+
+使用原则：
+
+- `bk_loader` 会独占串口。执行前先关闭串口日志、微信/SSCOM/BKFIL 串口监视，并运行
+  `lsof /dev/ttyUSB0 || true`。
+- 产品 CLI 和 OTA 正常时优先用 `update ota`。`bk_loader` 用于首次刷机、OTA 不可用、
+  固件无法启动、或需要救援恢复。
+- 不做整片擦除，除非明确进入工厂/救援流程。整片擦除可能清掉 RF、网络、校准和配置数据。
+- `all-app.bin` 是 BK 烧录工具使用的主 flash 镜像，不是板端 OTA 文件；OTA 仍使用
+  `app_pack.rbl`。
+- `/sf0` 眼睛资源不在 `all-app.bin` 里，仍要走资源镜像或资源升级流程。
+
+常用只读验证：
+
+```sh
+lsof /dev/ttyUSB0 || true
+/home/jason/armino1/bk_loader read \
+  -p /dev/ttyUSB0 \
+  --read_uid \
+  --link_type 4 \
+  --reset_type 3 \
+  --reset_baudrate 115200
+```
+
+常规主固件下载模板：
+
+```sh
+lsof /dev/ttyUSB0 || true
+/home/jason/armino1/bk_loader download \
+  -p /dev/ttyUSB0 \
+  -b 2000000 \
+  --link_type 4 \
+  --reset_type 3 \
+  --reset_baudrate 115200 \
+  -i /home/jason/armino1/cmaiw82al_ai_toy/projects/cmaiw82al_ai_toy/build/bk7258/cmaiw82al_ai_toy/package/all-app.bin \
+  -s 0x0 \
+  -e 0 \
+  -r
+```
+
+若工具停在 `Waiting reset`，在等待窗口内按一次开发板 reset；若 bootloader 已被擦除，
+可能需要按住电源直到 CP 日志显示 `POWER_LOCK(GPIO19)=1`。救援拆分刷写仍按
+bootloader、CP、AP 的顺序执行，并以每段 `Download complete, all pass` 为成功证据。
+
 ## AP/CPU1 启动超时恢复
 
 若冷启动日志只剩 CP 心跳，例如：

@@ -11,6 +11,7 @@
 #include "pet_scene.h"
 #include "pet_vision.h"
 #include "dialog_module.h"
+#include "net_config.h"
 #include "system_manager.h"
 #if CONFIG_IOT_DEV_CAMERA
 #include "iot_camera.h"
@@ -19,7 +20,7 @@
 
 static void cli_pet_help(void)
 {
-    CLI_RAW_LOGI("pet status|emote|event|action|behavior|scene|prompt|haptic|motion|voice|privacy|idle\r\n");
+    CLI_RAW_LOGI("pet status|emote|event|action|behavior|scene|prompt|haptic|motion|voice|privacy|idle|ble_pair\r\n");
     CLI_RAW_LOGI("  pet status\r\n");
     CLI_RAW_LOGI("  pet emote <emotion>\r\n");
     CLI_RAW_LOGI("  pet event <event>\r\n");
@@ -45,6 +46,7 @@ static void cli_pet_help(void)
     CLI_RAW_LOGI("  pet voice volume <0-100>\r\n");
     CLI_RAW_LOGI("  pet privacy on|off\r\n");
     CLI_RAW_LOGI("  pet idle\r\n");
+    CLI_RAW_LOGI("  pet ble_pair\r\n");
 }
 
 static void cli_pet_status(void)
@@ -746,6 +748,16 @@ static void cli_pet_cmd(char *pcWriteBuffer, int xWriteBufferLen, int argc, char
     } else if (os_strcmp(argv[1], "idle") == 0) {
         (void)pet_brain_handle_event(PET_EVENT_IDLE);
         CLI_LOGI("pet idle\r\n");
+    } else if (os_strcmp(argv[1], "ble_pair") == 0) {
+        int ret = BK_FAIL;
+
+        if (argc != 2) {
+            CLI_LOGE("pet ble_pair\r\n");
+            return;
+        }
+
+        ret = net_config_instance()->start_ble_provisioning();
+        CLI_LOGI("pet BLE pairing start ret=%d\r\n", ret);
     } else if (os_strcmp(argv[1], "help") == 0) {
         cli_pet_help();
     } else {
@@ -755,7 +767,7 @@ static void cli_pet_cmd(char *pcWriteBuffer, int xWriteBufferLen, int argc, char
 }
 
 static const struct cli_command s_pet_commands[] = {
-    {"pet", "pet status|emote|event|action|behavior|prompt|haptic|motion|voice|privacy|idle", cli_pet_cmd},
+    {"pet", "pet status|emote|event|action|behavior|prompt|haptic|motion|voice|privacy|idle|ble_pair", cli_pet_cmd},
 };
 
 int cli_app_pet_init(void)

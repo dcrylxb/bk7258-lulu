@@ -15,7 +15,7 @@ static void cli_update_forward_cmd(char *pcWriteBuffer, int xWriteBufferLen, int
     if (argc <= 0 || argv == NULL) {
         CLI_LOGI("usage: update flash|eyes|ota|if0 <http-url>\r\n");
         CLI_LOGI("usage: eye list|play <avi>|carousel [seconds]|stop|verify [hash]\r\n");
-        CLI_LOGI("usage: pet status|emote|event|action|haptic|motion|voice|privacy|idle\r\n");
+        CLI_LOGI("usage: pet status|emote|event|action|haptic|motion|voice|privacy|idle|ble_pair\r\n");
         CLI_LOGI("usage: auth status|secret|sign\r\n");
         return;
     }
@@ -53,7 +53,7 @@ static void cli_update_forward_cmd(char *pcWriteBuffer, int xWriteBufferLen, int
 static const struct cli_command s_update_forward_commands[] = {
     {"update", "update flash|eyes|ota|if0 <http-url>", cli_update_forward_cmd},
     {"eye", "eye list|play <avi>|carousel [seconds]|stop|verify [hash]", cli_update_forward_cmd},
-    {"pet", "pet status|emote|event|action|haptic|motion|voice|privacy|idle", cli_update_forward_cmd},
+    {"pet", "pet status|emote|event|action|haptic|motion|voice|privacy|idle|ble_pair", cli_update_forward_cmd},
     {"auth", "auth status|secret|sign", cli_update_forward_cmd},
 };
 

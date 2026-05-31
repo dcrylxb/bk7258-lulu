@@ -127,6 +127,21 @@ BLE provisioning notify source:version_check opcode:13
 BLE 配网/绑定时，必须把“Wi-Fi 入网成功”和“用户设备绑定成功”拆成两个状态，
 并复用上述 opcode 方向，不要把问题误判为 Wi-Fi 扫描或热点能力缺失。
 
+2026-05-31 小程序联调补充经验：`BOARDING_OP_START_WIFI_SCAN(24)` 的 notify
+响应可能会分包。设备通知帧格式是
+`[opcode_le16][status_u8][payload_len_le16][payload]`，其中 `opcode=24` 时
+`status=1` 表示当前包后面还有 Wi-Fi 列表续包，不是失败；`status=0` 表示本次
+Wi-Fi 列表发送结束。自研小程序必须累积 `status=1` 包中的 SSID，并等 `status=0`
+尾包后再渲染列表。实测日志中设备先发：
+
+```text
+notify conn:0 opcode:24 status:1 len:120
+notify conn:0 opcode:24 status:0 len:7
+```
+
+若小程序在第一包报“设备响应失败，opcode24,status 1”，根因是小程序把续包状态
+误判为失败；设备侧当时已经完成扫描并返回了 AP 列表。
+
 ## 三端设备鉴权绑定联调进展
 
 2026-05-31 对照 `nicolulu-server-golang-dev-v0.6.3`、`ai-companion-miniprogram-main`
