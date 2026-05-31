@@ -1,5 +1,6 @@
 from pathlib import Path
 import importlib.util
+import json
 import sys
 import textwrap
 import unittest
@@ -83,6 +84,16 @@ class BkBleProvisioningProbeTests(unittest.TestCase):
         self.assertIn("0000fe01-0000-1000-8000-00805f9b34fb", line)
         self.assertIn("RSSI: -48", line)
         self.assertNotIn("\n", line)
+
+    def test_auth_sign_payload_wraps_message_as_device_json_contract(self):
+        probe = load_probe()
+
+        payload = probe.build_auth_sign_payload("challenge-123")
+
+        self.assertEqual(json.loads(payload.decode("utf-8")), {
+            "cmd": "auth.sign",
+            "signing_message": "challenge-123",
+        })
 
 
 if __name__ == "__main__":

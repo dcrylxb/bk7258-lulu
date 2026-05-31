@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import binascii
+import json
 import re
 import subprocess
 import sys
@@ -77,7 +78,7 @@ def main() -> int:
         notify = find_char(chars, NOTIFY_UUID)
         session.enable_notify(notify)
         if args.command == "auth-sign":
-            payload = parse_payload_arg(args.message)
+            payload = build_auth_sign_payload(args.message)
             frame = build_write_frame(OP_AUTH_SIGN, payload)
             print(f"write opcode=151 handle={write.value_handle} bytes={frame.hex()}")
             session.write(write.value_handle, frame)
@@ -248,6 +249,16 @@ def parse_payload_arg(value: str) -> bytes:
     if value.startswith("hex:"):
         return bytes.fromhex(value[4:])
     return value.encode("utf-8")
+
+
+def build_auth_sign_payload(message: str) -> bytes:
+    if message.startswith("hex:"):
+        return parse_payload_arg(message)
+    payload = {
+        "cmd": "auth.sign",
+        "signing_message": message,
+    }
+    return json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
 
 def build_write_frame(opcode: int, payload: bytes) -> bytes:
