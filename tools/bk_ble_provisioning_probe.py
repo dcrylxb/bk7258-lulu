@@ -97,7 +97,7 @@ def main() -> int:
 def scan_devices(timeout: int) -> list[Device]:
     cmd = ["bluetoothctl", "--timeout", str(timeout), "scan", "on"]
     result = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
-    return parse_scan_output(result.stdout)
+    return enrich_devices_with_info(parse_scan_output(result.stdout))
 
 
 def parse_scan_output(output: str) -> list[Device]:
@@ -126,6 +126,28 @@ def is_candidate(device: Device) -> bool:
 
 def looks_like_device_detail(text: str) -> bool:
     return bool(re.match(r"^[A-Za-z ]+:", text))
+
+
+def enrich_devices_with_info(devices: list[Device]) -> list[Device]:
+    enriched: list[Device] = []
+    for device in devices:
+        info = bluetoothctl_info(device.address)
+        details = " ".join(part for part in [device.details, info] if part)
+        enriched.append(Device(address=device.address, name=device.name, details=details))
+    return enriched
+
+
+def bluetoothctl_info(address: str) -> str:
+    result = subprocess.run(
+        ["bluetoothctl", "info", address],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ""
+    return strip_ansi(result.stdout)
 
 
 class GattSession:

@@ -3,6 +3,7 @@ import importlib.util
 import sys
 import textwrap
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -42,6 +43,29 @@ class BkBleProvisioningProbeTests(unittest.TestCase):
 
         self.assertEqual(len(devices), 1)
         self.assertEqual(devices[0].name, "Unknown")
+        self.assertIn("FE01", devices[0].details.upper())
+        self.assertTrue(probe.is_candidate(devices[0]))
+
+    def test_scan_devices_enriches_devices_from_bluetoothctl_info(self):
+        probe = load_probe()
+
+        def fake_run(cmd, **kwargs):
+            if cmd[:3] == ["bluetoothctl", "--timeout", "1"]:
+                return type("Result", (), {
+                    "stdout": "[NEW] Device AA:BB:CC:DD:EE:FF Unknown\n",
+                    "returncode": 0,
+                })()
+            if cmd == ["bluetoothctl", "info", "AA:BB:CC:DD:EE:FF"]:
+                return type("Result", (), {
+                    "stdout": "UUID: Vendor specific (0000fe01-0000-1000-8000-00805f9b34fb)\n",
+                    "returncode": 0,
+                })()
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        with patch.object(probe.subprocess, "run", side_effect=fake_run):
+            devices = probe.scan_devices(1)
+
+        self.assertEqual(len(devices), 1)
         self.assertIn("FE01", devices[0].details.upper())
         self.assertTrue(probe.is_candidate(devices[0]))
 
