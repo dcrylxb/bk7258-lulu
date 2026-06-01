@@ -66,6 +66,7 @@ static void ble_parse_agent_response(const char *payload, uint16_t length);
 static void ble_handle_auth_sign(ble_prov_msg_t *msg);
 static void ble_notify_with_data(uint16_t opcode, int status, char *payload, uint16_t length, const char *source);
 static void ble_notify_status(uint16_t opcode, int status, const char *source);
+extern void bk_ble_np_init(void);
 
 static void net_config_prepare_ble_provisioning(bool start_default)
 {
@@ -844,7 +845,8 @@ static int net_start_ble_provisioning(void)
     }
 
     if (net_module->m_ble_provisioning_active) {
-        LOGI("BLE network provisioning already active\r\n");
+        LOGI("BLE network provisioning already active, restart BLE provisioning advertising\r\n");
+        bk_ble_np_init();
         return BK_OK;
     }
 
