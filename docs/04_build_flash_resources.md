@@ -119,21 +119,20 @@ lsof /dev/ttyUSB0 || true
 
 ```sh
 lsof /dev/ttyUSB0 || true
-/home/jason/armino1/bk_loader download \
+python3 tools/bk_loader_download_checked.py \
+  --loader /home/jason/armino1/bk_loader \
   -p /dev/ttyUSB0 \
-  -b 2000000 \
-  --link_type 4 \
-  --reset_type 3 \
-  --reset_baudrate 115200 \
-  -i /home/jason/armino1/cmaiw82al_ai_toy/projects/cmaiw82al_ai_toy/build/bk7258/cmaiw82al_ai_toy/package/all-app.bin \
-  -s 0x0 \
-  -e 0 \
-  -r
+  --image /home/jason/armino1/cmaiw82al_ai_toy/projects/cmaiw82al_ai_toy/build/bk7258/cmaiw82al_ai_toy/package/all-app.bin
 ```
 
 若工具停在 `Waiting reset`，在等待窗口内按一次开发板 reset；若 bootloader 已被擦除，
 可能需要按住电源直到 CP 日志显示 `POWER_LOCK(GPIO19)=1`。救援拆分刷写仍按
 bootloader、CP、AP 的顺序执行，并以每段 `Download complete, all pass` 为成功证据。
+
+`bk_loader` 某些失败路径会打印 `Download fail` 但仍以进程码 0 退出；因此日常主固件
+下载优先使用 `tools/bk_loader_download_checked.py`。该 wrapper 会原样输出
+`bk_loader` 日志，但只有看到 `Download complete` 和 `all pass` 成功标记才返回 0；
+看到 `Get bus failed`、`get bus fail`、`Download fail` 时会返回 1，避免误判已烧录。
 
 ## AP/CPU1 启动超时恢复
 
