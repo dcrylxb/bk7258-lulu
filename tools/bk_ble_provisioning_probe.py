@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import binascii
-import json
 import re
 import subprocess
 import sys
@@ -252,13 +251,7 @@ def parse_payload_arg(value: str) -> bytes:
 
 
 def build_auth_sign_payload(message: str) -> bytes:
-    if message.startswith("hex:"):
-        return parse_payload_arg(message)
-    payload = {
-        "cmd": "auth.sign",
-        "signing_message": message,
-    }
-    return json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return parse_payload_arg(message)
 
 
 def build_write_frame(opcode: int, payload: bytes) -> bytes:

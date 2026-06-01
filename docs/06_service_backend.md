@@ -142,6 +142,26 @@ notify conn:0 opcode:24 status:0 len:7
 若小程序在第一包报“设备响应失败，opcode24,status 1”，根因是小程序把续包状态
 误判为失败；设备侧当时已经完成扫描并返回了 AP 列表。
 
+2026-06-01 小程序绑定尾部复盘：`BOARDING_OP_SET_AGENT_INFO(13)` 的
+`channel` 不能简单等同于服务端工厂档案里的 `device_mac`。实测设备返回：
+
+```json
+{"channel":"c7_47_8c_cb_dd_4b"}
+```
+
+格式化后是 `C7:47:8C:CB:DD:4B`，但本地服务端档案记录为
+`C8:47:8C:4C:DD:CB`，该值可由官方 BLE 广播名 `bk_4CDDCB` 推导：
+`C8:47:8C` + `4C:DD:CB`。因此自研小程序的绑定策略是：
+
+- 先按官方 `opcode 500/13` 读取 channel，并优先用 channel 得到的 UID/MAC
+  请求 `bind/start`。
+- 如果服务端明确返回 `设备不存在` / `device does not exist`，且已选择设备的
+  BLE 名称匹配 `bk_XXXXXX`，再用广播名推导出的 `C8:47:8C:XX:XX:XX`
+  重试一次 `bind/start`。
+- 只有 `bind/start + auth.sign + bind/confirm` 完成后，才写 SSID/password 并发送
+  `BOARDING_OP_STATION_START(1)`。设备 `opcode 1 status 0` 只表示 Wi-Fi 入网成功，
+  不应掩盖前面的账号绑定失败。
+
 2026-06-01 补充电脑蓝牙调试经验：本机蓝牙可作为 Linux BLE GATT 探针，能替代
 手机完成“是否广播、是否能连接、FA00/EA01/EA02 是否存在、opcode 是否返回”的
 协议层定位，但不能完全替代微信小程序蓝牙栈和最终用户绑定页面验证。当前已确认
@@ -182,6 +202,13 @@ BLE provisioning 广播名。
   `POST /api/app/devices/bind/confirm`。
 - 绑定挑战签名消息由服务端生成，设备端必须对原文 UTF-8 字节做
   `HMAC-SHA256(device_secret, signing_message)`，输出小写 hex。
+- `signing_message` 必须保持短消息。官方 FA00/EA02 operation characteristic 上限是
+  128 字节，但微信真机默认 ATT 写入负载可能只有 20 字节，且官方设备端没有对
+  EA02 做长写重组。真实产品号、长 UID、MAC 和 nonce 拼成多行消息后再套 JSON，
+  会被截断成设备侧 `BOARDING_OP_AUTH_SIGN length:16` / `auth_sign_no_message`。
+  当前服务端把用户/设备/产品上下文放在已签名的 `bind_token` claims 中，BLE 侧只传
+  16 字节随机 nonce 原文给设备签名，opcode 151 请求帧为
+  `[151_le16][16_le16][nonce]`，整帧正好 20 字节。
 - 运行态启用依赖 `auth.enable=true`，OTA 下发短期 WebSocket token，WS/MQTT
   再按 token 和设备状态校验。
 
@@ -194,9 +221,8 @@ BFF/小程序阶段性改动：
 - `miniprogram/utils/api.js` 已增加 `startDeviceBinding(payload)` 和
   `confirmDeviceBinding(payload)`。
 - `miniprogram/utils/ble-auth.js` 已对齐官方 BLE provisioning 帧格式：发现设备、
-  连接 GATT、寻找可写和可通知特征，通过私有 opcode `151` 发送
-  `{"cmd":"auth.sign","signing_message":"..."}`，再从 notify 响应中解析
-  `signature`。
+  连接 GATT、寻找可写和可通知特征，通过私有 opcode `151` 直接发送 raw nonce，
+  再从 notify 响应中解析 `signature`。
 - `pages/add-device` 已支持录入 `productId/deviceUid/deviceMac` 并传入 pairing 页面；
   旧二维码/绑定码流程保留。
 - `pages/pairing` 已按“申请挑战 -> BLE 请求设备签名 -> 确认绑定”的状态流转接入，
@@ -255,3 +281,29 @@ BFF/小程序阶段性改动：
   `go test ./services/deviceauth ./controllers ./test/device_auth_e2e` 通过。
 - `ai-companion-miniprogram-main/bff`：
   `npm test` 24 项通过，`npm run build` 通过。
+
+2026-06-01 BLE 绑定尾部复盘：
+
+- 官方 BK 配网流程以 FA00 服务、EA02 写、EA01 通知为主线。设备收到 Wi-Fi 成功后会继续
+  通知 `BOARDING_OP_STATION_START(1)`、能力信息和 `BOARDING_OP_SET_AGENT_INFO(13)`。
+- 我们的商业绑定在官方 Wi-Fi 写入前插入了
+  `bind/start -> BOARDING_OP_AUTH_SIGN(151) -> bind/confirm`，这是正确方向：
+  不应等设备断开 BLE 或切 Wi-Fi 后再做服务端绑定。
+- 实测服务端日志显示：`SET_AGENT_INFO(13).channel` 返回
+  `c7_47_8c_cb_dd_4b`，但本地工厂档案是 `C8:47:8C:4C:DD:CB`；小程序已按
+  官方广播名 `bk_4CDDCB` 推导 Beken MAC 并在 `设备不存在` 时重试一次。
+- 如果日志出现“fallback `bind/start` 成功，但没有 `/bind/confirm`”，问题已经不在
+  服务端身份查询，而在 challenge 后的 BLE `auth.sign` 交换。小程序侧应显示签名阶段诊断，
+  关闭旧 FA00 session，重新打开一次 FA00 session，再重试 `BOARDING_OP_AUTH_SIGN(151)`。
+  重试成功后继续使用新 session 写 Wi-Fi，避免用户看到设备播报配网成功但服务端没有绑定记录。
+- 如果设备曾收到 `BOARDING_OP_AUTH_SIGN(151)` 但 payload 只有十几字节、JSON 解析失败
+  或小程序停在“写入网络并绑定”，优先检查 challenge 长度。官方代码的 operation
+  characteristic 最大长度是 128 字节；不要把
+  `bind-v1\nproduct\nuid\nmac\nnonce` 放进 `{"cmd":"auth.sign","signing_message":"..."}`
+  后直接写 EA02。正确做法是服务端下发短签名消息，`bind_token` 负责绑定上下文。
+- 进一步复盘发现，128 字节还不是手机真机的最小约束。官方 `ble_provisioning_utils.c`
+  收到 EA02 write 后会立刻按当前 `param->value` 解析 opcode，不会等待后续分包；微信
+  真机若按默认 20 字节写入，JSON auth.sign 首包会被解析为完整命令，设备只能看到
+  `payload_len=16` 的残缺 JSON。最终修复是：服务端 nonce 改为 12 字节随机数的
+  raw base64url（16 字符），小程序 opcode 151 写 raw nonce，不写 JSON。设备端已有 raw
+  payload 签名 fallback，因此无需新增固件协议分片。
