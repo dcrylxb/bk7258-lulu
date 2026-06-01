@@ -16,6 +16,8 @@
    调试复盘和后续调试清单。
 10. `10_offline_wake_word_research.md`：离线唤醒词官方文档、当前实现、
     Wanson 路线和是否需要训练模型的结论。
+11. `11_remote_audio_player_research.md`：远程 HTTP 音频播放器的官方组件、
+    当前 SDK 缺口、移植前置条件和验收命令。
 
 这些文档是产品工程的开发指引层。官方 WIKI 和上游工程只作为 API、流程和
 组件参考，不能覆盖本板硬件事实。

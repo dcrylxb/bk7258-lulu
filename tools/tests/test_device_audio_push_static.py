@@ -184,6 +184,32 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
         self.assertLess(prompt_parse, audio_url_required)
         self.assertLess(prompt_parse, disabled_guard)
 
+    def test_remote_audio_player_research_is_documented_before_enabling(self):
+        config = read("ap/config/bk7258_ap/config")
+        cmake = read("ap/components/bk_app_audio/CMakeLists.txt")
+        research_doc = ROOT / "docs" / "11_remote_audio_player_research.md"
+        readme = (ROOT / "docs" / "README.md").read_text(encoding="utf-8", errors="ignore")
+
+        self.assertNotIn("CONFIG_AUDIO_PLAYER=y", config)
+        self.assertIn("list(APPEND priv_req bk_audio_player)", cmake)
+        self.assertTrue(research_doc.exists(), "remote audio player research doc is required")
+
+        doc = research_doc.read_text(encoding="utf-8", errors="ignore")
+        for marker in [
+            "官方结论",
+            "当前 SDK 事实",
+            "不能直接开启 CONFIG_AUDIO_PLAYER",
+            "ap/components/bk_audio_player",
+            "CONFIG_WEBCLIENT",
+            "CONFIG_ADK_RAW_STREAM",
+            "CONFIG_ADK_ONBOARD_SPEAKER_STREAM",
+            "移植前置条件",
+            "验收命令",
+        ]:
+            self.assertIn(marker, doc)
+
+        self.assertIn("11_remote_audio_player_research.md", readme)
+
 
 if __name__ == "__main__":
     unittest.main()
