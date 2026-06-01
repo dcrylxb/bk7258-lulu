@@ -143,6 +143,25 @@ class DeviceAudioPushStaticTests(unittest.TestCase):
         ]:
             self.assertIn(marker, common_h + app_key_c)
 
+    def test_ble_auth_sign_response_includes_result_command_and_signature_only(self):
+        net_config = read("ap/main/net_config/net_config.c")
+
+        for marker in [
+            "#define BOARDING_OP_AUTH_SIGN              151",
+            'cJSON_GetObjectItemCaseSensitive(json, "signing_message")',
+            '"{\\"cmd\\":\\"auth.sign.result\\",\\"signature\\":\\"%s\\"}"',
+            "device_auth_sign_message(signing_message->valuestring",
+            "ble_notify_with_data(BOARDING_OP_AUTH_SIGN, BK_OK, response, response_len, \"auth_sign\");",
+        ]:
+            self.assertIn(marker, net_config)
+
+        response_start = net_config.index('"{\\"cmd\\":\\"auth.sign.result\\",\\"signature\\":\\"%s\\"}"')
+        response_block = net_config[
+            response_start:
+            net_config.index("ble_notify_with_data(BOARDING_OP_AUTH_SIGN", response_start)
+        ]
+        self.assertNotIn("device_secret", response_block)
+
     def test_audio_player_stop_is_exposed_as_device_mcp_tool(self):
         devices_h = read("ap/main/iot/iot_devices.h")
         devices_c = read("ap/main/iot/iot_devices.c")

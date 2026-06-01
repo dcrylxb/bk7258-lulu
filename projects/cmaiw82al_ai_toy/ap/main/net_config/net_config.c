@@ -42,6 +42,7 @@ static bool s_ble_split_scan_results = false;
 static volatile bool s_ble_scan_result_sent = false;
 static volatile bool s_ble_scan_done_event_seen = false;
 static volatile bool s_ble_scan_result_task_running = false;
+static volatile bool s_ble_station_start_pending = false;
 static volatile uint32_t s_ble_scan_request_id = 0;
 static char s_ble_agent_payload[BLE_AGENT_PAYLOAD_MAX];
 static uint16_t s_ble_agent_payload_len = 0;
@@ -79,8 +80,7 @@ static void net_config_prepare_ble_provisioning(bool start_default)
 
     if (start_default) {
         bk_network_provisioning_init(BK_NETWORK_PROVISIONING_TYPE_BLE);
-        net_module->m_ble_provisioning_active = true;
-        LOGI("BLE provisioning initialized and started\r\n");
+        LOGI("BLE provisioning initialized; running state waits for status callback\r\n");
     }
 }
 
@@ -432,37 +432,47 @@ static void ble_handle_auth_sign(ble_prov_msg_t *msg)
     os_memcpy(payload, (void *)(uintptr_t)msg->param, copy_len);
 
     json = cJSON_ParseWithLength(payload, copy_len);
-    if (json == NULL) {
-        LOGW("BLE auth.sign payload is not JSON\r\n");
-        ble_notify_status(BOARDING_OP_AUTH_SIGN, BK_FAIL, "auth_sign_bad_json");
-        return;
+    if ((json != NULL) && cJSON_IsObject(json)) {
+        signing_message = cJSON_GetObjectItemCaseSensitive(json, "signing_message");
+        if (!cJSON_IsString(signing_message) || (signing_message->valuestring == NULL) ||
+            (os_strlen(signing_message->valuestring) == 0)) {
+            LOGW("BLE auth.sign missing signing_message\r\n");
+            cJSON_Delete(json);
+            ble_notify_status(BOARDING_OP_AUTH_SIGN, BK_FAIL, "auth_sign_no_message");
+            return;
+        }
     }
 
-    signing_message = cJSON_GetObjectItemCaseSensitive(json, "signing_message");
-    if (!cJSON_IsString(signing_message) || (signing_message->valuestring == NULL) ||
-        (os_strlen(signing_message->valuestring) == 0)) {
-        LOGW("BLE auth.sign missing signing_message\r\n");
-        cJSON_Delete(json);
-        ble_notify_status(BOARDING_OP_AUTH_SIGN, BK_FAIL, "auth_sign_no_message");
-        return;
-    }
-
-    if (device_auth_sign_message(signing_message->valuestring,
-                                 signature,
-                                 sizeof(signature)) != BK_OK) {
-        LOGW("BLE auth.sign failed: device secret unavailable\r\n");
-        cJSON_Delete(json);
-        ble_notify_status(BOARDING_OP_AUTH_SIGN, BK_FAIL, "auth_sign_no_secret");
-        return;
+    if ((json != NULL) && cJSON_IsObject(json)) {
+        if (device_auth_sign_message(signing_message->valuestring,
+                                     signature,
+                                     sizeof(signature)) != BK_OK) {
+            LOGW("BLE auth.sign failed: device secret unavailable\r\n");
+            cJSON_Delete(json);
+            ble_notify_status(BOARDING_OP_AUTH_SIGN, BK_FAIL, "auth_sign_no_secret");
+            return;
+        }
+    } else {
+        if ((json != NULL) && !cJSON_IsObject(json)) {
+            cJSON_Delete(json);
+            json = NULL;
+        }
+        if (device_auth_sign_message(payload, signature, sizeof(signature)) != BK_OK) {
+            LOGW("BLE auth.sign failed: device secret unavailable\r\n");
+            ble_notify_status(BOARDING_OP_AUTH_SIGN, BK_FAIL, "auth_sign_no_secret");
+            return;
+        }
     }
 
     os_memset(response, 0, sizeof(response));
     response_len = os_snprintf(response, sizeof(response),
-                               "{\"signature\":\"%s\"}",
+                               "{\"cmd\":\"auth.sign.result\",\"signature\":\"%s\"}",
                                signature);
     LOGI("BLE auth.sign response len:%u\r\n", response_len);
     ble_notify_with_data(BOARDING_OP_AUTH_SIGN, BK_OK, response, response_len, "auth_sign");
-    cJSON_Delete(json);
+    if (json != NULL) {
+        cJSON_Delete(json);
+    }
 }
 
 static void net_config_ble_msg_handler(ble_prov_msg_t *msg)
@@ -489,6 +499,7 @@ static void net_config_ble_msg_handler(ble_prov_msg_t *msg)
                                               bk_ble_provisioning_info->ble_prov_info.password_value ?
                                               bk_ble_provisioning_info->ble_prov_info.password_value : "",
                                               true);
+            s_ble_station_start_pending = true;
             bk_event_unregister_cb(EVENT_MOD_WIFI, EVENT_WIFI_SCAN_DONE, ble_wlan_scan_done_handler);
             break;
         }
@@ -578,6 +589,7 @@ static void net_config_provisioning_status_cb(bk_network_provisioning_status_t s
     switch (status) {
         case BK_NETWORK_PROVISIONING_STATUS_RUNNING:
             net_config_instance()->m_ble_provisioning_active = true;
+            s_ble_station_start_pending = false;
             system_manager_instance()->send_msg_by_event(SYSTEM_EVENT_NET_NULL);
             break;
 
@@ -596,11 +608,13 @@ static void net_config_provisioning_status_cb(bk_network_provisioning_status_t s
                 system_manager_instance()->send_msg_by_event(SYSTEM_EVENT_NET_CONFIG_DONE);
             }
             net_config_instance()->m_ble_provisioning_active = false;
+            s_ble_station_start_pending = false;
             break;
 
         case BK_NETWORK_PROVISIONING_STATUS_FAILED:
         case BK_NETWORK_PROVISIONING_STATUS_RECONNECT_FAILED:
             net_config_instance()->m_ble_provisioning_active = false;
+            s_ble_station_start_pending = false;
             system_manager_instance()->send_msg_by_event(SYSTEM_EVENT_NET_CONNECT_FAIL);
             break;
 
@@ -667,10 +681,33 @@ static int app_netif_event_cb(void *arg, event_module_t event_module, int event_
         case EVENT_NETIF_GOT_IP4:
             got_ip = (netif_event_got_ip4_t *)event_data;
             LOGI("%s got ip\n", got_ip->netif_if == NETIF_IF_STA ? "STA" : "unknown netif");
+#if CONFIG_BK_NETWORK_PROVISIONING && CONFIG_BK_BLE_PROVISIONING
+            if (s_ble_station_start_pending) {
+                LOGI("BLE provisioning pending station got ip event ip:%s, notify station success\r\n", got_ip->ip);
+                ble_notify_with_data(BOARDING_OP_STATION_START, BK_OK,
+                                     got_ip->ip, os_strlen(got_ip->ip),
+                                     "netif_got_ip");
+                ble_notify_capabilities("netif_got_ip");
+                ble_notify_agent_status("netif_got_ip");
+                system_manager_instance()->send_msg_by_event(SYSTEM_EVENT_NET_CONFIG_DONE);
+                s_ble_station_start_pending = false;
+                net_config_instance()->m_ble_provisioning_active = false;
+                net_config_instance()->m_is_config = false;
+                break;
+            }
+#endif
             if(net_config_instance()->m_is_config)
             {
 #if CONFIG_BK_NETWORK_PROVISIONING && CONFIG_BK_BLE_PROVISIONING
                 if (net_config_instance()->m_ble_provisioning_active) {
+                    LOGI("BLE provisioning got ip event ip:%s, notify station success\r\n", got_ip->ip);
+                    ble_notify_with_data(BOARDING_OP_STATION_START, BK_OK,
+                                         got_ip->ip, os_strlen(got_ip->ip),
+                                         "netif_got_ip");
+                    ble_notify_capabilities("netif_got_ip");
+                    ble_notify_agent_status("netif_got_ip");
+                    system_manager_instance()->send_msg_by_event(SYSTEM_EVENT_NET_CONFIG_DONE);
+                    net_config_instance()->m_ble_provisioning_active = false;
                     break;
                 }
 #endif
